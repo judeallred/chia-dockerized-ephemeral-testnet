@@ -41,5 +41,10 @@ UNSAFE_RPC = _flag("UNSAFE_RPC")
 LOG_LEVEL = os.environ.get("CHIA_LOG_LEVEL", "INFO").upper()
 AUTO_V1_PLOTS = int(os.environ.get("AUTO_V1_PLOTS", "2"))
 V1_K = int(os.environ.get("V1_K", "25"))
+AUTO_V2_PLOTS = int(os.environ.get("AUTO_V2_PLOTS", "2"))
+V2_K = int(os.environ.get("V2_K", "28"))  # only k28 can win; smaller sizes are for testing this code
+V2_STRENGTH = int(os.environ.get("V2_STRENGTH", "2"))
+# Free memory a k28 plot needs. Each step down in k needs about half.
+V2_MIN_FREE_GB = float(os.environ.get("V2_MIN_FREE_GB", "11")) / 2 ** (28 - V2_K)
 # The testnet organisers ask for at most 30 GB of v2 plots per person.
 V2_LIMIT_GB = float(os.environ.get("V2_LIMIT_GB", "30"))

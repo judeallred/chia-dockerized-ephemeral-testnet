@@ -22,6 +22,7 @@ services:
       - ./plots:/plots
     environment:
       AUTO_V1_PLOTS: ${AUTO_V1_PLOTS:-2}
+      AUTO_V2_PLOTS: ${AUTO_V2_PLOTS:-2}
       CHIA_LOG_LEVEL: ${CHIA_LOG_LEVEL:-INFO}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,[::1],testnet,host.docker.internal}
       CORS_ORIGINS: ${CORS_ORIGINS:-}

@@ -4,6 +4,11 @@ A Chia ephemeral PoS2 testnet in one container: node, farmer, harvester, wallet 
 plotter that runs in your browser, and an RPC gateway, all on one port. The current testnet's config is included, so
 there is nothing to set up.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/dashboard-dark.png">
+  <img src="docs/dashboard.png" alt="The dashboard: countdown, chain ribbon, services as potted plants, farm, network, rewards and plots">
+</picture>
+
 ## Quick start
 
 You need Git and Docker with Compose.
@@ -17,8 +22,8 @@ cd chia-dockerized-ephemeral-testnet
 Then open http://localhost:8900. Without bash, use `docker compose up -d --build` instead of `./testnet up`.
 
 The first build takes a few minutes. The box then makes a key, finds peers and syncs the node (about 10 minutes for
-27,000 blocks). Once it is synced it makes two small v1 plots and starts farming. For v2 plots, click
-**Make v2 plots in the browser** on the dashboard (see [Plots](#plots)). `./testnet down` stops it and keeps
+27,000 blocks). Once it is synced it makes two small v1 plots and, if the container has
+enough memory, two v2 plots, and starts farming. You can also make v2 plots in your browser (see [Plots](#plots)). `./testnet down` stops it and keeps
 your key, plots and chain data. `./testnet help` lists the other commands.
 
 ## When a new testnet launches
@@ -60,6 +65,10 @@ curl localhost:8900/rpc/full_node/get_blockchain_state
 curl -X POST localhost:8900/rpc/wallet/get_wallet_balance -d '{"wallet_id": 1}'
 ```
 
+The dashboard has a console for the same calls:
+
+![RPC console on the dashboard](docs/rpc.png)
+
 `GET` works for `get_*` endpoints; everything else is `POST`. Port 58445 is the Chia peer protocol, so a
 light wallet on your machine can use the node.
 
@@ -67,15 +76,22 @@ light wallet on your machine can use the node.
 
 Plots go in `./plots`, which the harvester scans every 30 seconds.
 
-- **v1**: two k25 plots (about 0.7 GB each) are made automatically. `AUTO_V1_PLOTS=0` turns that off,
-  `./testnet box plot-v1 5` makes more. v1 plots stop farming at the v1 cut-off shown on the dashboard.
+- **v1, automatic**: two k25 plots (about 0.7 GB each). `AUTO_V1_PLOTS=0` turns that off, `./testnet box plot-v1 5` makes
+  more. v1 plots stop farming at the v1 cut-off shown on the dashboard.
+- **v2, automatic**: two k28 plots (about 1 GB each), one at a time on the CPU, at low priority. This only happens when the
+  container has 11 GB of free memory; otherwise the dashboard says why and the other ways below still work. On a Mac that
+  means giving Docker Desktop about 16 GB. `AUTO_V2_PLOTS=0` turns it off. Plots you add yourself count towards the two.
 - **v2 in the browser**: the bundled [chia-plotter-wasm](https://github.com/judeallred/chia-plotter-wasm) is at `/plotter/`,
   with nothing to install. Open it in Chrome or Edge on the same machine. This box's keys are filled in. Keep k at 28
   and choose the `plots` folder as the output. A k28 plot is about 1 GB and needs about 11 GB of free memory while it
   is made, so close other things first. It can use your GPU through WebGPU, even on a Mac, where the container can't.
   In other browsers, download the plot and add it on the dashboard.
 - **v2 with cpos or xchplot2**: use the farmer and pool public keys from the dashboard and write to `./plots`.
-- **v2 in the container**: `./testnet box plot-v2 2`. Needs 16 GB of RAM for Docker.
+- **v2 in the container, by hand**: `./testnet box plot-v2 2`. Same memory needs as the automatic ones.
+
+![The browser plotter with this box's keys filled in](docs/plotter.png)
+
+v2 plots must be k28. Other sizes don't count on this testnet.
 
 The testnet asks for at most 30 GB of v2 plots per person. The box enforces that for uploads and
 `plot-v2`; it can't for other plotters, so the dashboard warns instead.
@@ -97,6 +113,7 @@ put TLS in front.
 | --- | --- | --- |
 | `BOX_PORT` / `P2P_PORT` | 8900 / 58445 | Host ports |
 | `AUTO_V1_PLOTS` | 2 | Starter v1 plots |
+| `AUTO_V2_PLOTS` | 2 | Starter v2 plots, if there is enough memory |
 | `CHIA_REF` | hardfork-testnet | chia-blockchain branch |
 | `API_TOKEN` | | Bearer token for RPC, uploads and restarts |
 | `ALLOWED_HOSTS` | localhost and friends | Accepted `Host` names |
@@ -112,6 +129,8 @@ Put them in `.env`.
 - On this branch the farmer doesn't connect to the solver by itself; the box does it, and again after restarts.
 - Docker networks usually have no IPv6, so connections to IPv6 peers and `IN AAAA` lookups fail in the log. That is
   harmless.
+- Newer harvesters describe v2 plots in a way chia-testnet-monitor doesn't read yet, and it stops updating once you have
+  one. `app/run_monitor.py` runs it unmodified and translates that one answer.
 - The wallet only talks to the node in the container, so it syncs after the node does.
 - `./testnet up` reuses the code Docker already downloaded, which can be older than what `./testnet update` fetched. After
   an `up`, run `./testnet update` again if you need the newest.

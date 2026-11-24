@@ -178,15 +178,16 @@
     const v2gb = v2.reduce((a, p) => a + p.size, 0) / 1e9;
     const loaded = state?.farm?.plots ?? 0;
     const job = box.plot_job;
-    const key = JSON.stringify([box.plots.map((p) => p.path), loaded, job?.line, Math.round((box.now - (job?.started ?? 0)) / 10), box.network]);
+    const key = JSON.stringify([box.plots.map((p) => p.path), loaded, job?.line, box.v2_waiting, Math.round((box.now - (job?.started ?? 0)) / 10), box.network]);
     if (key === gardenKey) return;
     gardenKey = key;
     const bed = el("div", { class: "bed" });
-    if (!box.plots.length) bed.append(el("p", {}, job ? "The first plot is on its way." : box.auto_v1_plots ? "No plots yet. Starter v1 plots begin once the node is synced." : "No plots yet."));
+    if (!box.plots.length) bed.append(el("p", {}, job ? "The first plot is on its way." : box.auto_v1_plots || box.auto_v2_plots ? "No plots yet. Starter plots begin once the node is synced." : "No plots yet."));
     // Very large farms show their newest 400.
     bed.append(...box.plots.slice(0, 400).map((p) => sprout(p, loaded >= box.plots.length || p.kind === "v1")));
     const notes = [];
-    if (job) notes.push(el("p", { class: "box-note" }, `Making a v1 k${job.k} plot for ${ago(box.now - job.started)}. ${job.line ?? ""}`));
+    if (job) notes.push(el("p", { class: "box-note" }, `Making a ${job.kind} k${job.k} plot for ${ago(box.now - job.started)}. ${job.line ?? ""}`));
+    if (box.v2_waiting) notes.push(el("p", { class: "box-note" }, `Not making starter v2 plots: ${box.v2_waiting}. You can make them in the browser instead.`));
     if (v2gb > box.v2_limit_gb) notes.push(el("p", { class: "box-note warn" }, `▲ ${v2gb.toFixed(1)} GB of v2 plots is over the ${box.v2_limit_gb} GB the testnet asks for.`));
     if (v2.length && !state?.services?.solver && state?.ready) notes.push(el("p", { class: "box-note warn" }, "▲ The solver isn't connected to the farmer, so v2 plots can't win."));
     host.replaceChildren(
@@ -230,14 +231,16 @@
   function renderSetup() {
     const host = byId("box-setup");
     const running = box.phase === "running";
-    const key = JSON.stringify([box.phase, box.error]);
+    const mon = box.services.find((s) => s.name === "monitor");
+    const silent = running && !state?.ready && (mon?.uptime ?? 0) > 60;
+    const key = JSON.stringify([box.phase, box.error, silent]);
     document.querySelectorAll(".hero, main > .figures, main > .lower, main > .strength, main > .peers").forEach((n) => (n.hidden = !state?.ready));
     renderSync();
     if (key === setupKey) return;
     setupKey = key;
-    if (running && !box.error) { host.replaceChildren(); return; }
+    if (running && !box.error && !silent) { host.replaceChildren(); return; }
     const kids = running
-      ? [el("p", { class: "crit" }, `✕ New config ignored: ${box.error}`)]
+      ? [el("p", { class: "crit" }, box.error ? `✕ New config ignored: ${box.error}` : "✕ The monitor isn't reporting, so the charts are hidden. The services below are live.")]
       : box.phase.startsWith("waiting")
         ? [el("h2", {}, "Drop initial-config.zip here"),
            el("p", {}, "Get the latest one from the testnet Discord channel and drop it anywhere on this page, or put it in the config folder. The node, farmer, harvester, wallet and solver start by themselves."),

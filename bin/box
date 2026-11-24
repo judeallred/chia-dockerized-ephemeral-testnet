@@ -17,7 +17,13 @@ case "${1:-help}" in
     used=$(find /plots -name '*.gplot' -printf '%s\n' | awk '{t+=$1} END {printf "%d", t/1e9}')
     if (( used + n > ${V2_LIMIT_GB:-30} )); then echo "That would pass the ${V2_LIMIT_GB:-30} GB v2 limit (now ${used} GB)."; exit 1; fi
     read -r f p < <(keys)
-    exec chia plots create2 -f "$f" -p "$p" -s "$s" -n "$n" -d /plots -x ;;
+    # create2 writes straight to the final name, so plot elsewhere and move finished files in.
+    w=/data/tmp-manual-v2; rm -rf "$w"; mkdir -p "$w"
+    for ((i = 1; i <= n; i++)); do
+      chia plots create2 -f "$f" -p "$p" -s "$s" -n 1 -d "$w" -x
+      for g in "$w"/*.gplot; do b=$(basename "$g"); cp "$g" "/plots/.$b.partial" && mv "/plots/.$b.partial" "/plots/$b" && rm "$g"; done
+    done
+    rm -rf "$w" ;;
   mnemonic)
     echo "Testnet key. Anyone with these words can spend its coins."; exec chia keys show --show-mnemonic-seed ;;
   prune)

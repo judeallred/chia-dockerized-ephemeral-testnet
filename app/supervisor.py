@@ -91,6 +91,9 @@ class Supervisor:
         self.stopping = False
         self.started = time.time()
         self.plot_job: dict[str, Any] | None = None
+        self.v2_waiting: str | None = None  # why starter v2 plots aren't being made
+        self.v2_failed: str | None = None
+        self._v2_logged: str | None = None
         self.synced = False  # kept up to date by the gateway's collector
         self.height: int | None = None
         self.v1_cutoff: int | None = None
@@ -117,7 +120,7 @@ class Supervisor:
                 Service("farmer", [str(b / "chia_farmer")]),
                 Service("harvester", [str(b / "chia_harvester")]),
                 Service("wallet", [str(b / "chia_wallet")], 25),
-                Service("monitor", [str(S.PYTHON), str(mon / "server.py"), "--root", str(root), "--port", str(S.MONITOR_PORT)], 5),
+                Service("monitor", [str(S.PYTHON), str(Path(__file__).with_name("run_monitor.py")), str(mon / "server.py"), "--root", str(root), "--port", str(S.MONITOR_PORT)], 5),
             ]
         }
 
@@ -261,47 +264,130 @@ class Supervisor:
             await asyncio.sleep(5)
 
     # ---- starter plots ------------------------------------------------
-    def _v1_count(self) -> int:
-        return sum(1 for _ in S.PLOTS_DIR.rglob("*.plot"))
+    @staticmethod
+    def _plots(suffix: str) -> list[Path]:
+        return [p for p in S.PLOTS_DIR.rglob(f"*{suffix}") if not p.name.startswith(".")]
+
+    @staticmethod
+    def _free_memory_gb() -> float:
+        """What a new process here can use: the host's free memory, or what is left of the container's limit."""
+        free = psutil.virtual_memory().available
+        with contextlib.suppress(OSError, ValueError):
+            limit = int(Path("/sys/fs/cgroup/memory.max").read_text())  # "max" when there is no limit
+            used = int(Path("/sys/fs/cgroup/memory.current").read_text())
+            free = min(free, limit - used)
+        return free / 2**30
 
     async def _cancel_plot_job(self) -> None:
-        job = self.plot_job
-        if job and job.get("proc") and job["proc"].returncode is None:
+        # Cleared first, which is how _plot tells a cancelled run from a failed one.
+        job, self.plot_job = self.plot_job, None
+        if job and job["proc"].returncode is None:
             with contextlib.suppress(ProcessLookupError, PermissionError):
                 os.killpg(job["proc"].pid, signal.SIGKILL)
             await job["proc"].wait()
+
+    async def _plot(self, kind: str, k: int, root: Path, work: Path, args: list[str]) -> int | None:
+        """Runs one plotting command into an empty work folder. None if it was cancelled."""
+        shutil.rmtree(work, ignore_errors=True)
+        work.mkdir(parents=True)
+        # At low priority, and first to go if memory runs out, so the node and farmer are not what gets killed.
+        proc = await asyncio.create_subprocess_exec(
+            "nice", "-n", "15", "sh", "-c", 'echo 1000 > /proc/self/oom_score_adj; exec "$@"', "sh",
+            str(S.VENV_BIN / "chia"), "plots", *args,
+            env=network.chia_env(root), cwd=str(work), stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, start_new_session=True,
+        )  # fmt: skip
+        job = {"kind": kind, "k": k, "started": time.time(), "line": "", "proc": proc}
+        self.plot_job = job
+        assert proc.stdout is not None
+        async for raw in proc.stdout:
+            job["line"] = raw.decode("utf-8", "replace").strip()[:160] or job["line"]
+        code = await proc.wait()
+        if self.plot_job is not job:
+            return None
         self.plot_job = None
+        if code != 0:
+            log(f"{kind} plotting exited with {code}: {job['line']}")
+        return code
+
+    @staticmethod
+    def _deliver(work: Path, suffix: str) -> list[str]:
+        """Moves finished plots to the plots folder under a hidden name first, so the harvester never sees half a file."""
+        names = []
+        for src in work.glob(f"*{suffix}"):
+            partial = S.PLOTS_DIR / f".{src.name}.partial"
+            try:
+                shutil.copyfile(src, partial)
+                partial.replace(S.PLOTS_DIR / src.name)
+            finally:
+                partial.unlink(missing_ok=True)
+            names.append(src.name)
+        return names
+
+    def _v2_blocker(self) -> str | None:
+        """Why a v2 plot can't be made now, or None."""
+        if self.v2_failed:
+            return self.v2_failed
+        used = sum(p.stat().st_size for p in self._plots(".gplot"))
+        if used + 1.1e9 > S.V2_LIMIT_GB * 1e9:
+            return f"the {S.V2_LIMIT_GB:g} GB v2 limit is reached"
+        if min(shutil.disk_usage(S.DATA).free, shutil.disk_usage(S.PLOTS_DIR).free) < 10e9:
+            return "less than 10 GB of disk is free"
+        free = self._free_memory_gb()
+        if free < S.V2_MIN_FREE_GB:
+            return f"a k{S.V2_K} plot needs {S.V2_MIN_FREE_GB:.2g} GB of free memory and the container has {free:.1f} GB"
+        return None
+
+    async def _plot_once(self) -> None:
+        assert self.net is not None and self.key is not None
+        root, work, keys = self.net.root, S.DATA / "tmp", ["-f", self.key["farmer_pk"], "-p", self.key["pool_pk"]]
+        retired = self.height is not None and self.v1_cutoff is not None and self.height >= self.v1_cutoff
+        have_v1, have_v2 = len(self._plots(".plot")), len(self._plots(".gplot"))
+        if have_v1 < S.AUTO_V1_PLOTS and not retired and shutil.disk_usage(S.DATA).free > 10e9:
+            log(f"making starter v1 k{S.V1_K} plot {have_v1 + 1} of {S.AUTO_V1_PLOTS}")
+            code = await self._plot("v1", S.V1_K, root, work, [
+                "create", "-k", str(S.V1_K), "--override-k", "-n", "1", "-b", "1024", "-r", "2",
+                *keys, "-t", str(work), "-d", str(S.PLOTS_DIR), "-x",
+            ])  # fmt: skip
+            if code:
+                await asyncio.sleep(60)
+            return
+        self.v2_waiting = None
+        if have_v2 >= S.AUTO_V2_PLOTS:
+            return
+        blocker = self._v2_blocker()
+        if blocker:
+            if blocker.split(" and ")[0] != self._v2_logged:
+                self._v2_logged = blocker.split(" and ")[0]
+                log(f"not making v2 plots: {blocker}")
+            self.v2_waiting = blocker
+            return
+        log(f"making starter v2 k{S.V2_K} plot {have_v2 + 1} of {S.AUTO_V2_PLOTS}")
+        code = await self._plot("v2", S.V2_K, root, work, [
+            "create2", "-k", str(S.V2_K), "-s", str(S.V2_STRENGTH), "-n", "1", *keys, "-d", str(work), "-x",
+        ])  # fmt: skip
+        if code == 0:
+            names = await asyncio.to_thread(self._deliver, work, ".gplot")
+            log(f"finished {', '.join(names) or 'no plot'}")
+            if not names:
+                code = -1
+        if code:
+            # Most likely out of memory. Trying again on a loop would only make things worse.
+            killed = " (killed, probably out of memory)" if code in (-9, 137) else ""
+            self.v2_failed = f"the last try failed{killed}; restart the box to try again"
+        shutil.rmtree(work, ignore_errors=True)
 
     async def plot_loop(self) -> None:
-        """Makes a few small v1 plots, one at a time, so a fresh box has something to farm."""
+        """Makes a few plots, one at a time, so a fresh box has something to farm."""
         while not self.stopping:
             await asyncio.sleep(10)
-            retired = self.height is not None and self.v1_cutoff is not None and self.height >= self.v1_cutoff
-            if not (self.net and self.key and self.synced) or retired or self._v1_count() >= S.AUTO_V1_PLOTS:
-                continue
-            root, tmp, dest = self.net.root, S.DATA / "tmp", S.PLOTS_DIR
-            if shutil.disk_usage(S.DATA).free < 10e9:
-                continue
-            shutil.rmtree(tmp, ignore_errors=True)
-            tmp.mkdir(parents=True)
-            log(f"making a starter v1 k{S.V1_K} plot ({self._v1_count() + 1} of {S.AUTO_V1_PLOTS})")
-            proc = await asyncio.create_subprocess_exec(
-                "nice", "-n", "15", str(S.VENV_BIN / "chia"), "plots", "create",
-                "-k", str(S.V1_K), "--override-k", "-n", "1", "-b", "1024", "-r", "2",
-                "-f", self.key["farmer_pk"], "-p", self.key["pool_pk"], "-t", str(tmp), "-d", str(dest), "-x",
-                env=network.chia_env(root), stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, start_new_session=True,
-            )  # fmt: skip
-            self.plot_job = {"kind": "v1", "k": S.V1_K, "started": time.time(), "line": "", "proc": proc}
-            assert proc.stdout is not None
-            async for raw in proc.stdout:
-                if self.plot_job:
-                    self.plot_job["line"] = raw.decode("utf-8", "replace").strip()[:160] or self.plot_job["line"]
-            code = await proc.wait()
-            if code != 0 and self.plot_job:
-                log(f"plotting exited with {code}: {self.plot_job['line']}")
-                await asyncio.sleep(60)
-            self.plot_job = None
+            if self.net and self.key and self.synced:
+                try:
+                    await self._plot_once()
+                except Exception as e:
+                    self.plot_job = None
+                    log(f"plotting: {e!r}")
+                    await asyncio.sleep(60)
 
     async def shutdown(self) -> None:
         self.stopping = True

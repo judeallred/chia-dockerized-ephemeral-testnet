@@ -114,7 +114,7 @@ class Gateway:
     async def run(self) -> None:
         self.http = ClientSession(timeout=ClientTimeout(total=10))
         try:
-            await asyncio.gather(self._poll_monitor(), self._poll_disk())
+            await asyncio.gather(self._poll_monitor(), self._poll_node(), self._poll_disk())
         finally:
             await self.http.close()
 
@@ -127,18 +127,23 @@ class Gateway:
                     raw = await r.read()
                 state = json.loads(raw)
                 # Ignore an answer from the previous network's monitor.
-                if net and state.get("ready") and state.get("network") == net.name:
+                if net and state.get("ready") and state.get("network") == net.name and time.time() - state.get("now", 0) < 60:
                     self.state, self.state_raw, self.state_at = state, raw, time.time()
-                    node = state.get("node") or {}
-                    self.sup.synced = bool(node.get("synced"))
-                    self.sup.height = node.get("height")
                     self.sup.v1_cutoff = (state.get("fork") or {}).get("v1_cutoff")
             except Exception:
                 pass  # the monitor starts after the services and may be restarting
             if time.time() - self.state_at > 30 and self.state.get("ready"):
                 self.state, self.state_raw = {"ready": False}, b'{"ready": false}'
-                self.sup.synced = False
             await asyncio.sleep(2)
+
+    async def _poll_node(self) -> None:
+        """Sync state straight from the node, so plotting doesn't depend on the monitor."""
+        while True:
+            r = await self.call("full_node", "get_blockchain_state", {})
+            bs = (r or {}).get("blockchain_state") or {}
+            self.sup.synced = bool((bs.get("sync") or {}).get("synced"))
+            self.sup.height = (bs.get("peak") or {}).get("height")
+            await asyncio.sleep(5)
 
     async def _poll_disk(self) -> None:
         while True:
@@ -229,6 +234,8 @@ class Gateway:
             "plots": self.plots,
             "plot_job": job,
             "auto_v1_plots": S.AUTO_V1_PLOTS,
+            "auto_v2_plots": S.AUTO_V2_PLOTS,
+            "v2_waiting": sup.v2_waiting,
             "v2_limit_gb": S.V2_LIMIT_GB,
             "disk": self.disk,
             "token_required": bool(S.API_TOKEN),

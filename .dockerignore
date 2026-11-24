@@ -3,3 +3,4 @@ config/*
 ref
 **/.DS_Store
 **/__pycache__
+docs
