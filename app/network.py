@@ -175,6 +175,9 @@ def _patch(root: Path, key: dict[str, Any]) -> None:
             dirs.append(str(S.PLOTS_DIR))
         h["plot_directories"] = dirs
         h["plots_refresh_parameter"]["interval_seconds"] = 30
+        # The wallet only uses the node in this container. Otherwise, when that node is synced first, the wallet
+        # drops every other peer on connect and asks the introducer for more every few seconds, forever.
+        cfg["wallet"]["connect_to_unknown_peers"] = False
         for section in ("farmer", "pool"):
             if isinstance(cfg.get(section), dict) and not cfg[section].get("xch_target_address"):
                 cfg[section]["xch_target_address"] = key["wallet_address"]

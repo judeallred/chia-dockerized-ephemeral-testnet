@@ -83,7 +83,9 @@ Put them in `.env`.
 - The node may log `failed fetching 0 to 31 from peers` and restart its sync a few times at first. That
   happens when a block arrives while the weight proof is checked. It retries until it gets through.
 - On this branch the farmer doesn't connect to the solver by itself; the box does it, and again after restarts.
-- Docker networks usually have no IPv6, so connections to IPv6 peers fail in the log. That is harmless.
+- Docker networks usually have no IPv6, so connections to IPv6 peers and `IN AAAA` lookups fail in the log. That is
+  harmless.
+- The wallet only talks to the node in the container, so it syncs after the node does.
 - Old networks' data: `./testnet box prune`.
 
 ## License
