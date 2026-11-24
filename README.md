@@ -1,7 +1,8 @@
 # Chia ephemeral testnet in Docker
 
-A Chia ephemeral PoS2 testnet node, farmer, harvester, wallet and solver in one container, with a dashboard
-and an RPC gateway on one port. The current testnet's config is included, so there is nothing to set up.
+A Chia ephemeral PoS2 testnet in one container: node, farmer, harvester, wallet and solver, with a dashboard, a v2
+plotter that runs in your browser, and an RPC gateway, all on one port. The current testnet's config is included, so
+there is nothing to set up.
 
 ## Quick start
 
@@ -16,7 +17,8 @@ cd chia-dockerized-ephemeral-testnet
 Then open http://localhost:8900. Without bash, use `docker compose up -d --build` instead of `./testnet up`.
 
 The first build takes a few minutes. The box then makes a key, finds peers and syncs the node (about 10 minutes for
-27,000 blocks). Once it is synced it makes two small v1 plots and starts farming. `./testnet down` stops it and keeps
+27,000 blocks). Once it is synced it makes two small v1 plots and starts farming. For v2 plots, click
+**Make v2 plots in the browser** on the dashboard (see [Plots](#plots)). `./testnet down` stops it and keeps
 your key, plots and chain data. `./testnet help` lists the other commands.
 
 ## When a new testnet launches
@@ -67,9 +69,11 @@ Plots go in `./plots`, which the harvester scans every 30 seconds.
 
 - **v1**: two k25 plots (about 0.7 GB each) are made automatically. `AUTO_V1_PLOTS=0` turns that off,
   `./testnet box plot-v1 5` makes more. v1 plots stop farming at the v1 cut-off shown on the dashboard.
-- **v2 in the browser**: open `/plotter/` in Chrome or Edge. Your keys are filled in. Choose the `plots`
-  folder as the output. It uses WebGPU, which a Linux container on a Mac cannot. A k28 plot takes about
-  11 GB of memory while it is made, so close other things first.
+- **v2 in the browser**: the bundled [chia-plotter-wasm](https://github.com/judeallred/chia-plotter-wasm) is at `/plotter/`,
+  with nothing to install. Open it in Chrome or Edge on the same machine. This box's keys are filled in. Keep k at 28
+  and choose the `plots` folder as the output. A k28 plot is about 1 GB and needs about 11 GB of free memory while it
+  is made, so close other things first. It can use your GPU through WebGPU, even on a Mac, where the container can't.
+  In other browsers, download the plot and add it on the dashboard.
 - **v2 with cpos or xchplot2**: use the farmer and pool public keys from the dashboard and write to `./plots`.
 - **v2 in the container**: `./testnet box plot-v2 2`. Needs 16 GB of RAM for Docker.
 
