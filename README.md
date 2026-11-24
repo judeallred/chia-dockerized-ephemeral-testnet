@@ -1,22 +1,45 @@
 # Chia ephemeral testnet in Docker
 
-A Chia ephemeral PoS2 testnet node, farmer, harvester, wallet and solver in one
-container, with a dashboard and an RPC gateway on one port.
+A Chia ephemeral PoS2 testnet node, farmer, harvester, wallet and solver in one container, with a dashboard
+and an RPC gateway on one port. The current testnet's config is included, so there is nothing to set up.
+
+## Quick start
+
+You need Git and Docker with Compose.
 
 ```sh
+git clone https://github.com/judeallred/chia-dockerized-ephemeral-testnet
+cd chia-dockerized-ephemeral-testnet
 ./testnet up
-open http://localhost:8900
 ```
 
-That joins the testnet in [`default/initial-config.zip`](default/initial-config.zip), currently
-`test-2026-11-19-1-chia`. Testnets are replaced often, so if the node finds no peers or stops getting blocks,
-get the latest zip from the Discord channel and run `./testnet up <zip>`. A config in `./config` always wins over the
-bundled one. The first build takes a few minutes. The node
-then finds its peers and syncs; small v1 starter plots are made once it is synced.
+Then open http://localhost:8900. Without bash, use `docker compose up -d --build` instead of `./testnet up`.
 
-**New testnet?** Drop the new `initial-config.zip` anywhere on the dashboard, or run `./testnet up` with it.
-The box switches over. Your key and plots carry over, and chain data is kept per network.
-If the branch moved too, run `./testnet update`.
+The first build takes a few minutes. The box then makes a key, finds peers and syncs the node (about 10 minutes for
+27,000 blocks). Once it is synced it makes two small v1 plots and starts farming. `./testnet down` stops it and keeps
+your key, plots and chain data. `./testnet help` lists the other commands.
+
+## When a new testnet launches
+
+The bundled config is [`default/initial-config.zip`](default/initial-config.zip), currently for
+`test-2026-11-19-1-chia`. Ephemeral testnets are replaced often, so it goes out of date. If your node finds no peers or
+stops getting blocks, get the latest `initial-config.zip` from the testnet Discord channel and do one of these:
+
+- drop it anywhere on the dashboard
+- run `./testnet up path/to/initial-config.zip`
+- put it in `./config`
+
+The box switches within seconds. Your key and plots carry over, and chain data is kept per network.
+If the testnet also needs newer code, run `./testnet update` afterwards.
+
+Which config is used:
+
+- The newest `.zip` or `.yaml` in `./config` always wins.
+- The bundled one is used only while `./config` has none. Emptying `./config` does not move a running box. To go back to
+  the bundled testnet, empty it and run `./testnet down`, then `./testnet up`.
+- To get a newer bundled config, run `git pull` and `./testnet up`, with no config in `./config`.
+
+To update the bundled config in this repository, replace `default/initial-config.zip` and the network name above.
 
 ## What is on the port
 
@@ -86,6 +109,8 @@ Put them in `.env`.
 - Docker networks usually have no IPv6, so connections to IPv6 peers and `IN AAAA` lookups fail in the log. That is
   harmless.
 - The wallet only talks to the node in the container, so it syncs after the node does.
+- `./testnet up` reuses the code Docker already downloaded, which can be older than what `./testnet update` fetched. After
+  an `up`, run `./testnet update` again if you need the newest.
 - Old networks' data: `./testnet box prune`.
 
 ## License
