@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Runs the testnet container. ./testnet help
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+port="${BOX_PORT:-8900}"
+remote_head() { git ls-remote "$1" "$2" | awk 'NR==1 {print $1}'; }
+
+case "${1:-help}" in
+  up)
+    if [[ $# -gt 1 ]]; then
+      mkdir -p config/old
+      find config -maxdepth 1 -type f \( -name '*.zip' -o -name '*.yaml' -o -name '*.yml' \) -exec mv {} config/old/ \;
+      cp "$2" config/ && touch "config/$(basename "$2")"
+    fi
+    docker compose up -d --build
+    echo "Dashboard: http://localhost:$port" ;;
+  down) docker compose down ;;
+  update)
+    # Newest testnet branch and monitor. Keys, plots and chain data stay.
+    export CHIA_COMMIT MONITOR_COMMIT
+    CHIA_COMMIT="$(remote_head https://github.com/Chia-Network/chia-blockchain.git "refs/heads/${CHIA_REF:-hardfork-testnet}")"
+    MONITOR_COMMIT="$(remote_head https://github.com/greimela/chia-testnet-monitor.git HEAD)"
+    [[ -n "$CHIA_COMMIT" && -n "$MONITOR_COMMIT" ]] || { echo "Could not look up the newest commits."; exit 1; }
+    docker compose up -d --build ;;
+  logs) docker compose logs -f --tail 50 ;;
+  sh) docker compose exec testnet bash ;;
+  chia|box) docker compose exec testnet "$@" ;;
+  plotter)
+    # Builds a browser plotter (an Astro site in <checkout>/web) into vendor/plotter.
+    src="${2:-${PLOTTER_SRC:-}}"
+    [[ -f "$src/web/package.json" ]] || { echo "Usage: ./testnet plotter <checkout> (or set PLOTTER_SRC)"; exit 1; }
+    [[ -f "$src/web/public/wasm/pos2w64.wasm" ]] || { echo "Build the plotter's WASM in $src first."; exit 1; }
+    work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+    # Works on a copy, so the checkout stays as it is.
+    tar -C "$src/web" --exclude dist --exclude node_modules --exclude 'public/dev-*.js' -cf - . | tar -C "$work" -xf -
+    (cd "$work" && pnpm install --frozen-lockfile --silent && pnpm exec astro build >/dev/null)
+    find vendor/plotter -mindepth 1 ! -name .gitkeep -delete
+    cp -R "$work/dist/." vendor/plotter/
+    rm -f vendor/plotter/_headers
+    echo "Bundled the plotter from $(git -C "$src" rev-parse --short HEAD). Run ./testnet up to put it in the image." ;;
+  *)
+    cat <<HELP
+./testnet up [initial-config.zip]   build and start, optionally with a new config
+./testnet down                      stop (keys, plots and chain data stay)
+./testnet update                    rebuild on the newest testnet branch and monitor
+./testnet logs                      follow the container's log
+./testnet chia <args>               any chia command, e.g. ./testnet chia show -s
+./testnet box <args>                plot-v1, plot-v2, mnemonic, prune
+./testnet plotter <checkout>        bundle a browser plotter build
+HELP
+    ;;
+esac

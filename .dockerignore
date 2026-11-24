@@ -1,0 +1,5 @@
+plots/*
+config/*
+ref
+**/.DS_Store
+**/__pycache__

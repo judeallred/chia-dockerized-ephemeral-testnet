@@ -1,0 +1,30 @@
+name: chia-testnet
+services:
+  testnet:
+    image: chia-testnet-box
+    build:
+      context: .
+      args:
+        CHIA_REF: ${CHIA_REF:-hardfork-testnet}
+        CHIA_COMMIT: ${CHIA_COMMIT:-}
+        MONITOR_COMMIT: ${MONITOR_COMMIT:-}
+    restart: unless-stopped
+    stop_grace_period: 90s
+    ports:
+      # Dashboard, plotter and RPC gateway. Loopback only: the gateway can spend from the testnet wallet.
+      - "127.0.0.1:${BOX_PORT:-8900}:8900"
+      # Chia peer protocol, so a light wallet on this machine can use the node.
+      - "127.0.0.1:${P2P_PORT:-58445}:58445"
+    volumes:
+      - data:/data
+      - ./config:/config
+      - ./plots:/plots
+    environment:
+      AUTO_V1_PLOTS: ${AUTO_V1_PLOTS:-2}
+      CHIA_LOG_LEVEL: ${CHIA_LOG_LEVEL:-INFO}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,[::1],testnet,host.docker.internal}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      API_TOKEN: ${API_TOKEN:-}
+      UNSAFE_RPC: ${UNSAFE_RPC:-}
+volumes:
+  data:

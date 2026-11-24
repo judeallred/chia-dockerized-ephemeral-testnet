@@ -1,0 +1,27 @@
+#!/bin/bash
+# Helper inside the container: docker compose exec testnet box <command>
+set -euo pipefail
+keys() { chia keys show --json | /chia-blockchain/.venv/bin/python -c 'import sys,json;t=sys.stdin.read();k=json.loads(t[t.index("{"):])["keys"][0];print(k["farmer_pk"],k["pool_pk"])'; }
+case "${1:-help}" in
+  plot-v1)
+    read -r f p < <(keys); mkdir -p /data/tmp-manual
+    exec chia plots create -k "${V1_K:-25}" --override-k -n "${2:-1}" -b 1024 -r 2 -f "$f" -p "$p" -t /data/tmp-manual -d /plots -x ;;
+  plot-v2)
+    n="${2:-1}"; s="${3:-2}"
+    [[ "$n" =~ ^[0-9]+$ && "$s" =~ ^[0-9]+$ ]] || { echo "usage: box plot-v2 [count] [strength]"; exit 2; }
+    avail=$(awk '/MemAvailable/ {printf "%d", $2/1048576}' /proc/meminfo)
+    if (( avail < 11 )); then
+      echo "k28 v2 plots need about 11 GB of free memory (16 GB total); this container has ${avail} GB."
+      echo "Use the browser plotter at /plotter/ instead, or give Docker more memory."; exit 1
+    fi
+    used=$(find /plots -name '*.gplot' -printf '%s\n' | awk '{t+=$1} END {printf "%d", t/1e9}')
+    if (( used + n > ${V2_LIMIT_GB:-30} )); then echo "That would pass the ${V2_LIMIT_GB:-30} GB v2 limit (now ${used} GB)."; exit 1; fi
+    read -r f p < <(keys)
+    exec chia plots create2 -f "$f" -p "$p" -s "$s" -n "$n" -d /plots -x ;;
+  mnemonic)
+    echo "Testnet key. Anyone with these words can spend its coins."; exec chia keys show --show-mnemonic-seed ;;
+  prune)
+    cur=$(basename "$(readlink /data/current)")
+    for d in /data/networks/*/; do n=$(basename "$d"); [[ "$n" == "$cur" ]] || { echo "removing $n"; rm -rf "$d"; }; done ;;
+  *) echo "box plot-v1 [count] | plot-v2 [count] [strength] | mnemonic | prune (delete old networks' data)" ;;
+esac
