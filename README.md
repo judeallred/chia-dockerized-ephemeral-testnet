@@ -82,3 +82,8 @@ Put them in `.env`.
 - On this branch the farmer doesn't connect to the solver by itself; the box does it, and again after restarts.
 - Docker networks usually have no IPv6, so connections to IPv6 peers fail in the log. That is harmless.
 - Old networks' data: `./testnet box prune`.
+
+## License
+
+Apache 2.0, see [LICENSE](LICENSE). The image also contains chia-blockchain, chia-testnet-monitor and
+chia-plotter-wasm, each under its own Apache 2.0 license.
