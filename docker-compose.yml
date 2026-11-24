@@ -8,6 +8,7 @@ services:
         CHIA_REF: ${CHIA_REF:-hardfork-testnet}
         CHIA_COMMIT: ${CHIA_COMMIT:-}
         MONITOR_COMMIT: ${MONITOR_COMMIT:-}
+        PLOTTER_COMMIT: ${PLOTTER_COMMIT:-}
     restart: unless-stopped
     stop_grace_period: 90s
     ports:

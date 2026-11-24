@@ -1,10 +1,24 @@
 # syntax=docker/dockerfile:1
+
+# The browser plotter. Its WASM is committed, so this only builds the page.
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS plotter
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/* \
+ && npm install -g pnpm@12
+ARG PLOTTER_REPO=https://github.com/judeallred/chia-plotter-wasm.git
+# Set to a commit hash to pin it; ./testnet update passes the newest.
+ARG PLOTTER_COMMIT=
+RUN git clone -q "$PLOTTER_REPO" /src && cd /src \
+ && if [ -n "$PLOTTER_COMMIT" ]; then git checkout -q "$PLOTTER_COMMIT"; fi
+WORKDIR /src/web
+RUN pnpm install --frozen-lockfile && pnpm exec astro build \
+ && rm -f dist/_headers && test -f dist/wasm/pos2w64.wasm && git rev-parse HEAD > dist/COMMIT
+
 FROM python:3.12-slim-bookworm AS build
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates build-essential && rm -rf /var/lib/apt/lists/*
 
 ARG CHIA_REPO=https://github.com/Chia-Network/chia-blockchain.git
 ARG CHIA_REF=hardfork-testnet
-# Set to a commit hash to pin the build (and to bust the cache when the branch moves; ./box update does this).
+# Set to a commit hash to pin the build (and to bust the cache when the branch moves; ./testnet update does this).
 ARG CHIA_COMMIT=
 WORKDIR /
 RUN git clone --filter=blob:none -b "$CHIA_REF" "$CHIA_REPO" /chia-blockchain \
@@ -29,7 +43,7 @@ FROM python:3.12-slim-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends tini ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=build /chia-blockchain /chia-blockchain
 COPY --from=build /opt/monitor /opt/monitor
-COPY vendor/plotter /opt/plotter
+COPY --from=plotter /src/web/dist /opt/plotter
 COPY bin/ /usr/local/bin/
 COPY app /opt/box/app
 

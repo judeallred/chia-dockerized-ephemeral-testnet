@@ -3,9 +3,6 @@ config/*
 !config/.gitkeep
 plots/*
 !plots/.gitkeep
-# The browser plotter build comes from elsewhere (./testnet plotter)
-vendor/plotter/*
-!vendor/plotter/.gitkeep
 .env
 __pycache__/
 .DS_Store

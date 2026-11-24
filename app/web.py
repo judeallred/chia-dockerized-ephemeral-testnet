@@ -105,8 +105,9 @@ class Gateway:
         self.disk: dict[str, Any] = {}
         self._rpc_cache: dict[str, tuple[int, ssl.SSLContext]] = {}
         self._rpc_net: NetworkConfig | None = None
-        self.commit, self.monitor_commit = (
-            (p / "COMMIT").read_text().strip() if (p / "COMMIT").exists() else "unknown" for p in (S.CHIA_SRC, S.MONITOR_SRC)
+        self.commit, self.monitor_commit, self.plotter_commit = (
+            (p / "COMMIT").read_text().strip() if (p / "COMMIT").exists() else "unknown"
+            for p in (S.CHIA_SRC, S.MONITOR_SRC, S.PLOTTER_DIST)
         )
 
     # ---- background collection ---------------------------------------
@@ -186,10 +187,7 @@ class Gateway:
 
     async def plotter(self, _: web.Request) -> web.StreamResponse:
         """The WASM plotter's page, plus a script that fills in this box's keys."""
-        index = S.PLOTTER_DIST / "index.html"
-        if not index.exists():
-            return web.Response(status=404, text="The browser plotter isn't bundled in this image.")
-        html = index.read_text()
+        html = (S.PLOTTER_DIST / "index.html").read_text()
         tag = '<script src="/static/plotter-bridge.js" defer></script>'
         html = html.replace("</body>", f"{tag}</body>") if "</body>" in html else html + tag
         return web.Response(text=html, content_type="text/html", headers=ISOLATION)
@@ -234,7 +232,7 @@ class Gateway:
             "v2_limit_gb": S.V2_LIMIT_GB,
             "disk": self.disk,
             "token_required": bool(S.API_TOKEN),
-            "plotter": (S.PLOTTER_DIST / "index.html").exists(),
+            "plotter_commit": self.plotter_commit,
         }
 
     async def api_box(self, _: web.Request) -> web.Response:

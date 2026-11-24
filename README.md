@@ -20,7 +20,7 @@ If the branch moved too, run `./testnet update`.
 | Path | What |
 | --- | --- |
 | `/` | Dashboard: [chia-testnet-monitor](https://github.com/greimela/chia-testnet-monitor), cloned at build time and unmodified, plus this box's services, plots, RPC console and log |
-| `/plotter/` | Browser plotter for v2 plots, if bundled (see below) |
+| `/plotter/` | Browser plotter for v2 plots: [chia-plotter-wasm](https://github.com/judeallred/chia-plotter-wasm), cloned and built into the image |
 | `/rpc/<service>/<endpoint>` | Chia RPC without certificates: `full_node`, `wallet`, `farmer`, `harvester`, `solver` |
 | `/api/state`, `/api/box` | The dashboard's data as JSON |
 | `/api/plots/<name>` | `PUT` a finished plot file |
@@ -49,9 +49,6 @@ Plots go in `./plots`, which the harvester scans every 30 seconds.
 
 The testnet asks for at most 30 GB of v2 plots per person. The box enforces that for uploads and
 `plot-v2`; it can't for other plotters, so the dashboard warns instead.
-
-The browser plotter is not part of this repository. `./testnet plotter <checkout>` bundles one from a local
-checkout. Without it, `/plotter/` is a 404 and everything else works.
 
 ## Keys
 
