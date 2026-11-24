@@ -45,6 +45,7 @@ COPY --from=build /chia-blockchain /chia-blockchain
 COPY --from=build /opt/monitor /opt/monitor
 COPY --from=plotter /src/web/dist /opt/plotter
 COPY bin/ /usr/local/bin/
+COPY default /opt/box/default
 COPY app /opt/box/app
 
 # /data/current points at the active network, so `docker compose exec testnet chia ...` just works.

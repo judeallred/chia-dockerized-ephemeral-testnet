@@ -4,11 +4,14 @@ A Chia ephemeral PoS2 testnet node, farmer, harvester, wallet and solver in one
 container, with a dashboard and an RPC gateway on one port.
 
 ```sh
-./testnet up ~/Downloads/initial-config.zip
+./testnet up
 open http://localhost:8900
 ```
 
-Get `initial-config.zip` from the testnet Discord channel. The first build takes a few minutes. The node
+That joins the testnet in [`default/initial-config.zip`](default/initial-config.zip), currently
+`test-2026-11-19-1-chia`. Testnets are replaced often, so if the node finds no peers or stops getting blocks,
+get the latest zip from the Discord channel and run `./testnet up <zip>`. A config in `./config` always wins over the
+bundled one. The first build takes a few minutes. The node
 then finds its peers and syncs; small v1 starter plots are made once it is synced.
 
 **New testnet?** Drop the new `initial-config.zip` anywhere on the dashboard, or run `./testnet up` with it.

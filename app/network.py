@@ -90,10 +90,14 @@ def candidates() -> list[Path]:
         return []
 
 
-def newest() -> NetworkConfig | None:
-    for p in candidates()[:1]:
+def newest(use_default: bool) -> NetworkConfig | None:
+    """The newest config in /config, or the bundled one if there is none and use_default is set."""
+    found = candidates()[:1]
+    if not found and use_default and S.DEFAULT_CONFIG.exists():
+        found = [S.DEFAULT_CONFIG]
+    for p in found:
         try:
-            return parse(p.read_bytes(), p.name)
+            return parse(p.read_bytes(), "bundled default" if p == S.DEFAULT_CONFIG else p.name)
         except OSError as e:
             raise ConfigError(str(e)) from None
         except ConfigError as e:

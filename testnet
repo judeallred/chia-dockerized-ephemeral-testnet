@@ -28,7 +28,7 @@ case "${1:-help}" in
   chia|box) docker compose exec testnet "$@" ;;
   *)
     cat <<HELP
-./testnet up [initial-config.zip]   build and start, optionally with a new config
+./testnet up [initial-config.zip]   build and start, on the bundled testnet or a new config
 ./testnet down                      stop (keys, plots and chain data stay)
 ./testnet update                    rebuild on the newest testnet branch, monitor and plotter
 ./testnet logs                      follow the container's log

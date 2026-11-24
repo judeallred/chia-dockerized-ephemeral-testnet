@@ -7,6 +7,7 @@ from pathlib import Path
 
 DATA = Path(os.environ.get("BOX_DATA", "/data"))
 CONFIG_DIR = Path(os.environ.get("BOX_CONFIG", "/config"))
+DEFAULT_CONFIG = Path("/opt/box/default/initial-config.zip")  # used while /config is empty
 PLOTS_DIR = Path(os.environ.get("BOX_PLOTS", "/plots"))
 KEYS_ROOT = Path(os.environ.get("CHIA_KEYS_ROOT", "/data/keys"))
 CHIA_SRC = Path("/chia-blockchain")

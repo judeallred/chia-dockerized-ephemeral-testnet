@@ -225,7 +225,8 @@ class Supervisor:
     async def watch_config(self) -> None:
         while not self.stopping:
             try:
-                net = await asyncio.to_thread(network.newest)
+                # Emptying /config doesn't pull a running box back to the bundled network.
+                net = await asyncio.to_thread(network.newest, self.net is None)
                 if net and net.sha != self.bad_sha and (self.net is None or net.sha != self.net.sha):
                     await self.switch(net)
                 elif net and self.net and net.sha == self.net.sha:
