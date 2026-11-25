@@ -10,7 +10,8 @@ ARG PLOTTER_COMMIT=
 RUN git clone -q "$PLOTTER_REPO" /src && cd /src \
  && if [ -n "$PLOTTER_COMMIT" ]; then git checkout -q "$PLOTTER_COMMIT"; fi
 WORKDIR /src/web
-RUN pnpm install --frozen-lockfile && pnpm exec astro build \
+# Built for /plotter/, where the box serves it. Plotter versions without PLOTTER_BASE build for / instead.
+RUN pnpm install --frozen-lockfile && PLOTTER_BASE=/plotter/ pnpm exec astro build \
  && rm -f dist/_headers && test -f dist/wasm/pos2w64.wasm && git rev-parse HEAD > dist/COMMIT
 
 FROM python:3.12-slim-bookworm AS build

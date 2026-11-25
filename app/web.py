@@ -198,9 +198,12 @@ class Gateway:
         return web.Response(text=html, content_type="text/html", headers=ISOLATION)
 
     async def plotter_asset(self, request: web.Request) -> web.StreamResponse:
-        top = request.path.split("/")[1]  # "_astro" or "wasm"
-        base = (S.PLOTTER_DIST / top).resolve()
-        path = (base / request.match_info["path"]).resolve()
+        """The plotter's files: under /plotter/ when it is built for that path, at /_astro and /wasm when built for /."""
+        rel = request.path.removeprefix("/plotter/").lstrip("/")
+        if rel == "index.html":
+            return await self.plotter(request)  # with the box's keys filled in
+        base = S.PLOTTER_DIST.resolve()
+        path = (base / rel).resolve()
         if not path.is_relative_to(base) or not path.is_file():
             raise web.HTTPNotFound
         return web.FileResponse(path, headers={**ISOLATION, "Cache-Control": "no-cache"})
@@ -436,6 +439,7 @@ class Gateway:
         r.add_get("/", self.index)
         r.add_get("/plotter", self.plotter)
         r.add_get("/plotter/", self.plotter)
+        r.add_get(r"/plotter/{path:.+}", self.plotter_asset)
         r.add_get(r"/_astro/{path:.+}", self.plotter_asset)
         r.add_get(r"/wasm/{path:.+}", self.plotter_asset)
         r.add_get(r"/static/{path:.+}", self.static)
